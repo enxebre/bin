@@ -24,12 +24,12 @@ const (
 	domainVcpu             = 1
 	ignKey                 = "/var/lib/libvirt/images/master-bootstrap.ign"
 	volumeKey 			   = "/var/lib/libvirt/images/extra-worker"
-	networkInterfaceName = "tectonic"
-	networkInterfaceHostname = "extra-worker"
-	networkInterfaceAddress = "192.168.124.0/24"
+	networkInterfaceName = ""
+	networkInterfaceHostname = "test1-extra-worker"
+	networkInterfaceAddress = "192.168.124.53"
 	networkUUID = "11ac9efd-2f8b-455d-93a7-2027f35a83be"
 	autostart = true
-	uri = "qemu://10.80.94.1/system"
+	uri = "qemu+tcp://10.80.94.1/system"
 )
 
 // Client libvirt
@@ -417,23 +417,9 @@ func setNetworkInterfaces(domainDef *libvirtxml.Domain,
 		//		},
 		//	}
 		//}
-		networkUUID := networkUUID
-		// when using a "network_id" we are referring to a "network resource"
-		// we have defined somewhere else...
-		network, err := virConn.LookupNetworkByUUIDString(networkUUID)
-		if err != nil {
-			return fmt.Errorf("Can't retrieve network ID %s", networkUUID)
-		}
-		defer network.Free()
-
-		networkName, err := network.GetName()
-		if err != nil {
-			return fmt.Errorf("Error retrieving network name: %s", err)
-		}
-		networkDef, err := newDefNetworkfromLibvirt(network)
 
 		// connect to the interface to the network... first, look for the network
-		if networkInterfaceName != ""{
+		if networkInterfaceName != "" {
 			// when using a "network_name" we do not try to do anything: we just
 			// connect to that network
 			netIface.Source = &libvirtxml.DomainInterfaceSource{
@@ -441,49 +427,67 @@ func setNetworkInterfaces(domainDef *libvirtxml.Domain,
 					Network: networkInterfaceName,
 				},
 			}
-		} else if HasDHCP(networkDef) {
-			hostname := networkInterfaceHostname
-			//if addresses, ok := d.GetOk(prefix + ".addresses"); ok {
-			if true {
-				// some IP(s) provided
-				address := networkInterfaceAddress
-				ip := net.ParseIP(address)
-				if ip == nil {
-					return fmt.Errorf("Could not parse addresses '%s'", address)
-				}
+		} else if networkUUID != "" {
+			// when using a "network_id" we are referring to a "network resource"
+			// we have defined somewhere else...
+			network, err := virConn.LookupNetworkByUUIDString(networkUUID)
+			if err != nil {
+				return fmt.Errorf("Can't retrieve network ID %s", networkUUID)
+			}
+			defer network.Free()
 
-				log.Printf("[INFO] Adding IP/MAC/host=%s/%s/%s to %s", ip.String(), mac, hostname, networkName)
-				if err := updateOrAddHost(network, ip.String(), mac, hostname); err != nil {
-					return err
+			networkName, err := network.GetName()
+			if err != nil {
+				return fmt.Errorf("Error retrieving network name: %s", err)
+			}
+			networkDef, err := newDefNetworkfromLibvirt(network)
+
+			if HasDHCP(networkDef) {
+				hostname := domainDef.Name
+				if networkInterfaceHostname != "" {
+					hostname = networkInterfaceHostname
 				}
-			} else {
-				// no IPs provided: if the hostname has been provided, wait until we get an IP
-				wait := false
-				for _, iface := range *waitForLeases {
-					if iface == &netIface {
-						wait = true
-						break
+				//if addresses, ok := d.GetOk(prefix + ".addresses"); ok {
+				if networkInterfaceAddress != "" {
+					// some IP(s) provided
+					address := networkInterfaceAddress
+					ip := net.ParseIP(address)
+					if ip == nil {
+						return fmt.Errorf("Could not parse addresses '%s'", address)
+					}
+
+					log.Printf("[INFO] Adding IP/MAC/host=%s/%s/%s to %s", ip.String(), mac, hostname, networkName)
+					if err := updateOrAddHost(network, ip.String(), mac, hostname); err != nil {
+						return err
+					}
+				} else {
+					// no IPs provided: if the hostname has been provided, wait until we get an IP
+					wait := false
+					for _, iface := range *waitForLeases {
+						if iface == &netIface {
+							wait = true
+							break
+						}
+					}
+					if !wait {
+						return fmt.Errorf("Cannot map '%s': we are not waiting for DHCP lease and no IP has been provided", hostname)
+					}
+					// the resource specifies a hostname but not an IP, so we must wait until we
+					// have a valid lease and then read the IP we have been assigned, so we can
+					// do the mapping
+					log.Printf("[DEBUG] Do not have an IP for '%s' yet: will wait until DHCP provides one...", hostname)
+					partialNetIfaces[strings.ToUpper(mac)] = &pendingMapping{
+						mac:      strings.ToUpper(mac),
+						hostname: hostname,
+						network:  network,
 					}
 				}
-				if !wait {
-					return fmt.Errorf("Cannot map '%s': we are not waiting for DHCP lease and no IP has been provided", hostname)
-				}
-				// the resource specifies a hostname but not an IP, so we must wait until we
-				// have a valid lease and then read the IP we have been assigned, so we can
-				// do the mapping
-				log.Printf("[DEBUG] Do not have an IP for '%s' yet: will wait until DHCP provides one...", hostname)
-				partialNetIfaces[strings.ToUpper(mac)] = &pendingMapping{
-					mac:      strings.ToUpper(mac),
-					hostname: hostname,
-					network:  network,
-				}
 			}
-		}
-
-		netIface.Source = &libvirtxml.DomainInterfaceSource{
-			Network: &libvirtxml.DomainInterfaceSourceNetwork{
-				Network: networkName,
-			},
+			netIface.Source = &libvirtxml.DomainInterfaceSource{
+				Network: &libvirtxml.DomainInterfaceSourceNetwork{
+					Network: networkName,
+				},
+			}
 		}
 		domainDef.Devices.Interfaces = append(domainDef.Devices.Interfaces, netIface)
 	}
