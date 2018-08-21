@@ -19,16 +19,16 @@ import (
 // LibVirtConIsNil is a global string error msg
 const (
 	LibVirtConIsNil string = "the libvirt connection was nil"
-	domainName             = "test"
+	domainName             = "test2"
 	domainMemory           = 2048
 	domainVcpu             = 1
 	ignKey                 = "/var/lib/libvirt/images/master-bootstrap.ign"
 	volumeKey 			   = "/var/lib/libvirt/images/extra-worker"
 	networkInterfaceName = ""
 	networkInterfaceHostname = "test1-extra-worker"
-	networkInterfaceAddress = "192.168.124.53"
-	networkUUID = "11ac9efd-2f8b-455d-93a7-2027f35a83be"
-	autostart = true
+	networkInterfaceAddress = "192.168.124.11"
+	networkUUID = "118745e8-cd59-4930-bfc0-6453d6e15dd6"
+	autostart = false
 	uri = "qemu+tcp://10.80.94.1/system"
 )
 
@@ -568,9 +568,9 @@ func createDomain() error {
 	//setBootDevices(d, &domainDef)
 
 	log.Printf("[INFO] setCoreOSIgnition")
-	if err := setCoreOSIgnition(&domainDef); err != nil {
-		return err
-	}
+	//if err := setCoreOSIgnition(&domainDef); err != nil {
+	//	return err
+	//}
 
 	log.Printf("[INFO] setDisks")
 	if err := setDisks(&domainDef, virConn); err != nil {
