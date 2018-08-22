@@ -200,6 +200,7 @@ func resourceLibvirtVolumeCreate() error {
 		//}
 
 		volume = nil
+		volumeDef.Capacity.Value = uint64(size)
 		baseVolume, err := client.libvirt.LookupStorageVolByKey(baseVolumeID)
 		if err != nil {
 			return fmt.Errorf("Can't retrieve volume %s", baseVolumeID)

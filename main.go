@@ -17,12 +17,12 @@ import (
 )
 
 // LibVirtConIsNil is a global string error msg
-const (
+var (
 	LibVirtConIsNil string = "the libvirt connection was nil"
-	domainName             = "test2"
+	domainName             = "extra-worker"
 	domainMemory           = 2048
 	domainVcpu             = 1
-	ignKey                 = "/var/lib/libvirt/images/master-bootstrap.ign"
+	ignKey                 = "/var/lib/libvirt/images/worker.ign"
 	volumeKey 			   = "/var/lib/libvirt/images/extra-worker"
 	networkInterfaceName = ""
 	networkInterfaceHostname = "test1-extra-worker"
@@ -31,6 +31,30 @@ const (
 	autostart = false
 	uri = "qemu+tcp://10.80.94.1/system"
 )
+
+func initValues() {
+	if v := os.Getenv("domainName"); v != "" {
+		domainName = v
+	}
+	if v := os.Getenv("volumeKey"); v != "" {
+		volumeKey = v
+	}
+	if v := os.Getenv("ignKey"); v != "" {
+		ignKey = v
+	}
+	if v := os.Getenv("networkInterfaceHostname"); v != "" {
+		networkInterfaceHostname = v
+	}
+	if v := os.Getenv("networkInterfaceAddress"); v != "" {
+		networkInterfaceAddress = v
+	}
+	if v := os.Getenv("networkUUID"); v != "" {
+		networkUUID = v
+	}
+	if v := os.Getenv("uri"); v != "" {
+		uri = v
+	}
+}
 
 // Client libvirt
 type Client struct {
@@ -551,7 +575,7 @@ func createDomain() error {
 	//domainDef.OS.Initrd = d.Get("initrd").(string)
 	//domainDef.OS.Type.Arch = d.Get("arch").(string)
 	//domainDef.OS.Type.Machine = d.Get("machine").(string)
-	//domainDef.Devices.Emulator = d.Get("emulator").(string)
+	domainDef.Devices.Emulator = "/usr/bin/kvm-spice"
 
 	//arch, err := getHostArchitecture(virConn)
 	//if err != nil {
@@ -568,9 +592,9 @@ func createDomain() error {
 	//setBootDevices(d, &domainDef)
 
 	log.Printf("[INFO] setCoreOSIgnition")
-	//if err := setCoreOSIgnition(&domainDef); err != nil {
-	//	return err
-	//}
+	if err := setCoreOSIgnition(&domainDef); err != nil {
+		return err
+	}
 
 	log.Printf("[INFO] setDisks")
 	if err := setDisks(&domainDef, virConn); err != nil {
@@ -666,6 +690,7 @@ func createDomain() error {
 }
 
 func main() {
+	initValues()
 	if err := resourceLibvirtVolumeCreate(); err != nil {
 		log.Fatalf("Main: %s", err)
 	}
