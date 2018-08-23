@@ -26,6 +26,10 @@
 
 
 [[constraint]]
+  name = "github.com/davecgh/go-spew"
+  version = "1.1.1"
+
+[[constraint]]
   name = "github.com/libvirt/libvirt-go"
   version = "4.6.0"
 
@@ -34,7 +38,16 @@
   version = "4.6.0"
 
 [[constraint]]
-  name = "github.com/davecgh/go-spew"
+  name = "k8s.io/apimachinery"
+  version = "kubernetes-1.9.0"
+
+[[constraint]]
+  name = "k8s.io/api"
+  version= "kubernetes-1.9.0"
+
+#[[constraint]]
+#  name = "k8s.io/code-generator"
+#  version = "release-1.9"
 
 [prune]
   go-tests = true
