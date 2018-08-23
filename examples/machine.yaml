@@ -14,19 +14,19 @@ spec:
     value:
       apiVersion: libvirtproviderconfig/v1alpha1
       kind: LibvirtMachineProviderConfig
-      DomainName: test
-      DomainMemory: 2048
-      DomainVcpu: 1
-      IgnKey: /var/lib/libvirt/images/worker.ign
-      Volume:
-        PoolName: default
-        BaseVolumeID: /var/lib/libvirt/images/coreos_base
-        VolumeName: worker-example
-      NetworkInterfaceName: tectonic
-      NetworkInterfaceHostname: worker-example
-      NetworkInterfaceAddress: 192.168.124.12
-      Autostart: false
-      Uri: qemu+tcp://10.80.94.1/system
+      domainName: test
+      domainMemory: 2048
+      domainVcpu: 1
+      ignKey: /var/lib/libvirt/images/worker.ign
+      volume:
+        poolName: default
+        baseVolumeID: /var/lib/libvirt/images/coreos_base
+        volumeName: worker-example
+      networkInterfaceName: tectonic
+      networkInterfaceHostname: worker-example
+      networkInterfaceAddress: 192.168.124.12
+      autostart: false
+      uri: qemu+tcp://10.80.94.1/system
   versions:
     kubelet: ""
     controlPlane: ""
