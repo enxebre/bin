@@ -1,0 +1,32 @@
+---
+apiVersion: "cluster.k8s.io/v1alpha1"
+kind: Machine
+metadata:
+  name: worker-example
+  namespace: test
+  generateName: vs-worker-
+  labels:
+    sigs.k8s.io/cluster-api-cluster: tb-asg-35
+    sigs.k8s.io/cluster-api-machine-role: infra
+    sigs.k8s.io/cluster-api-machine-type: worker
+spec:
+  providerConfig:
+    value:
+      apiVersion: libvirtproviderconfig/v1alpha1
+      kind: LibvirtMachineProviderConfig
+      DomainName: test
+      DomainMemory: 2048
+      DomainVcpu: 1
+      IgnKey: /var/lib/libvirt/images/worker.ign
+      Volume:
+        PoolName: default
+        BaseVolumeID: /var/lib/libvirt/images/coreos_base
+        VolumeName: worker-example
+      NetworkInterfaceName: tectonic
+      NetworkInterfaceHostname: worker-example
+      NetworkInterfaceAddress: 192.168.124.11
+      Autostart: false
+      Uri: qemu+tcp://10.80.94.1/system
+  versions:
+    kubelet: ""
+    controlPlane: ""

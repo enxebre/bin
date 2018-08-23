@@ -12,3 +12,10 @@ image: ## Build binary
 	@echo -e "\033[32mBuilding package...\033[0m"
 	mkdir -p bin
 	$(DOCKER_IMAGE)
+
+gendeepcopy:
+	#go build -o $$GOPATH/bin/deepcopy-gen github.com/enxebre/cluster-api-provider-libvirt/vendor/k8s.io/code-generator/cmd/deepcopy-gen
+	deepcopy-gen \
+	  -i ./cloud/libvirt/providerconfig,./cloud/libvirt/providerconfig/v1alpha1 \
+	  -O zz_generated.deepcopy \
+	  -h boilerplate.go.txt

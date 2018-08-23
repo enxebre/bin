@@ -1,4 +1,4 @@
-package main
+package machine
 
 import (
 	"bytes"
@@ -12,49 +12,15 @@ import (
 	"math/rand"
 
 	"github.com/davecgh/go-spew/spew"
+	providerconfigv1 "github.com/enxebre/cluster-api-provider-libvirt/cloud/libvirt/providerconfig/v1alpha1"
 	libvirt "github.com/libvirt/libvirt-go"
 	"github.com/libvirt/libvirt-go-xml"
+	clusterv1 "sigs.k8s.io/cluster-api/pkg/apis/cluster/v1alpha1"
 )
 
-// LibVirtConIsNil is a global string error msg
-var (
-	LibVirtConIsNil          string = "the libvirt connection was nil"
-	domainName                      = "extra-worker"
-	domainMemory                    = 2048
-	domainVcpu                      = 1
-	ignKey                          = "/var/lib/libvirt/images/worker.ign"
-	volumeKey                       = "/var/lib/libvirt/images/extra-worker"
-	networkInterfaceName            = ""
-	networkInterfaceHostname        = "test1-extra-worker"
-	networkInterfaceAddress         = "192.168.124.11"
-	networkUUID                     = "118745e8-cd59-4930-bfc0-6453d6e15dd6"
-	autostart                       = false
-	uri                             = "qemu+tcp://10.80.94.1/system"
+const (
+	baseVolumePath = "/var/lib/libvirt/images/"
 )
-
-func initValues() {
-	if v := os.Getenv("domainName"); v != "" {
-		domainName = v
-	}
-	if v := os.Getenv("volumeKey"); v != "" {
-		volumeKey = v
-	}
-	if v := os.Getenv("ignKey"); v != "" {
-		ignKey = v
-	}
-	if v := os.Getenv("networkInterfaceHostname"); v != "" {
-		networkInterfaceHostname = v
-	}
-	if v := os.Getenv("networkInterfaceAddress"); v != "" {
-		networkInterfaceAddress = v
-	}
-	if v := os.Getenv("networkUUID"); v != "" {
-		networkUUID = v
-	}
-	if v := os.Getenv("uri"); v != "" {
-		uri = v
-	}
-}
 
 // Client libvirt
 type Client struct {
@@ -222,15 +188,14 @@ func newDomainDefForConnection(virConn *libvirt.Connect) (libvirtxml.Domain, err
 	return d, nil
 }
 
-func setCoreOSIgnition(domainDef *libvirtxml.Domain) error {
-	ignitionKey := ignKey
+func setCoreOSIgnition(domainDef *libvirtxml.Domain, ignKey string) error {
 	domainDef.QEMUCommandline = &libvirtxml.DomainQEMUCommandline{
 		Args: []libvirtxml.DomainQEMUCommandlineArg{
 			{
 				Value: "-fw_cfg",
 			},
 			{
-				Value: fmt.Sprintf("name=opt/com.coreos/config,file=%s", ignitionKey),
+				Value: fmt.Sprintf("name=opt/com.coreos/config,file=%s", ignKey),
 			},
 		},
 	}
@@ -278,7 +243,7 @@ func randomWWN(strlen int) string {
 	return oui + string(result)
 }
 
-func setDisks(domainDef *libvirtxml.Domain, virConn *libvirt.Connect) error {
+func setDisks(domainDef *libvirtxml.Domain, virConn *libvirt.Connect, volumeKey string) error {
 	disk := newDefDisk(0)
 	log.Printf("[INFO] LookupStorageVolByKey")
 	diskVolume, err := virConn.LookupStorageVolByKey(volumeKey)
@@ -406,10 +371,11 @@ func updateHost(n *libvirt.Network, ip, mac, name string) error {
 
 func setNetworkInterfaces(domainDef *libvirtxml.Domain,
 	virConn *libvirt.Connect, partialNetIfaces map[string]*pendingMapping,
-	waitForLeases *[]*libvirtxml.DomainInterface) error {
-	for i := 0; i < 1; i++ {
-		//prefix := fmt.Sprintf("network_interface.%d", i)
+	waitForLeases *[]*libvirtxml.DomainInterface,
+	networkInterfaceHostname string, networkInterfaceName string, networkInterfaceAddress string) error {
 
+	// TODO: support more than 1 interface
+	for i := 0; i < 1; i++ {
 		netIface := libvirtxml.DomainInterface{
 			Model: &libvirtxml.DomainInterfaceModel{
 				Type: "virtio",
@@ -426,39 +392,12 @@ func setNetworkInterfaces(domainDef *libvirtxml.Domain,
 			Address: mac,
 		}
 
-		// this is not passed to libvirt, but used by waitForAddress
-		//if waitForLease, ok := d.GetOk(prefix + ".wait_for_lease"); ok {
-		//	if waitForLease.(bool) {
-		//		*waitForLeases = append(*waitForLeases, &netIface)
-		//	}
-		//}
-
-		// connect to the interface to the network... first, look for the network
-		//if n, ok := d.GetOk(prefix + ".network_name"); ok {
-		//	// when using a "network_name" we do not try to do anything: we just
-		//	// connect to that network
-		//	netIface.Source = &libvirtxml.DomainInterfaceSource{
-		//		Network: &libvirtxml.DomainInterfaceSourceNetwork{
-		//			Network: n.(string),
-		//		},
-		//	}
-		//}
-
-		// connect to the interface to the network... first, look for the network
 		if networkInterfaceName != "" {
-			// when using a "network_name" we do not try to do anything: we just
-			// connect to that network
-			netIface.Source = &libvirtxml.DomainInterfaceSource{
-				Network: &libvirtxml.DomainInterfaceSourceNetwork{
-					Network: networkInterfaceName,
-				},
-			}
-		} else if networkUUID != "" {
 			// when using a "network_id" we are referring to a "network resource"
 			// we have defined somewhere else...
-			network, err := virConn.LookupNetworkByUUIDString(networkUUID)
+			network, err := virConn.LookupNetworkByName(networkInterfaceName)
 			if err != nil {
-				return fmt.Errorf("Can't retrieve network ID %s", networkUUID)
+				return fmt.Errorf("Can't retrieve network name %s", networkInterfaceName)
 			}
 			defer network.Free()
 
@@ -473,13 +412,11 @@ func setNetworkInterfaces(domainDef *libvirtxml.Domain,
 				if networkInterfaceHostname != "" {
 					hostname = networkInterfaceHostname
 				}
-				//if addresses, ok := d.GetOk(prefix + ".addresses"); ok {
 				if networkInterfaceAddress != "" {
 					// some IP(s) provided
-					address := networkInterfaceAddress
-					ip := net.ParseIP(address)
+					ip := net.ParseIP(networkInterfaceAddress)
 					if ip == nil {
-						return fmt.Errorf("Could not parse addresses '%s'", address)
+						return fmt.Errorf("Could not parse addresses '%s'", networkInterfaceAddress)
 					}
 
 					log.Printf("[INFO] Adding IP/MAC/host=%s/%s/%s to %s", ip.String(), mac, hostname, networkName)
@@ -527,8 +464,8 @@ type Config struct {
 }
 
 // Client libvirt, generate libvirt client given URI
-func (c *Config) Client() (*Client, error) {
-	libvirtClient, err := libvirt.NewConnect(c.URI)
+func buildClient(uri string) (*Client, error) {
+	libvirtClient, err := libvirt.NewConnect(uri)
 	if err != nil {
 		return nil, err
 	}
@@ -541,163 +478,158 @@ func (c *Config) Client() (*Client, error) {
 	return client, nil
 }
 
-func createDomain() error {
-	log.Printf("[DEBUG] Create resource libvirt_domain")
-
-	config := &Config{
-		URI: uri,
+// MachineConfigProviderFromClusterAPIMachineSpec gets the machine provider config MachineSetSpec from the
+// specified cluster-api MachineSpec.
+func MachineProviderConfigFromClusterAPIMachineSpec(ms *clusterv1.MachineSpec) (*providerconfigv1.LibvirtMachineProviderConfig, error) {
+	if ms.ProviderConfig.Value == nil {
+		return nil, fmt.Errorf("no Value in ProviderConfig")
 	}
-	client, err := config.Client()
+	obj, gvk, err := providerconfigv1.Codecs.UniversalDecoder(providerconfigv1.SchemeGroupVersion).Decode([]byte(ms.ProviderConfig.Value.Raw), nil, nil)
 	if err != nil {
-		return fmt.Errorf("Failed to build libvirt client: %s", err)
+		return nil, err
 	}
-	virConn := client.libvirt
-
-	domainDef, err := newDomainDefForConnection(virConn)
-	if err != nil {
-		return fmt.Errorf("Failed to newDomainDefForConnection: %s", err)
+	spec, ok := obj.(*providerconfigv1.LibvirtMachineProviderConfig)
+	if !ok {
+		return nil, fmt.Errorf("unexpected object when parsing machine provider config: %#v", gvk)
 	}
+	return spec, nil
+}
 
-	domainDef.Name = domainName
-
-	//if cpuMode, ok := d.GetOk("cpu.mode"); ok {
-	//	domainDef.CPU = &libvirtxml.DomainCPU{
-	//		Mode: cpuMode.(string),
-	//	}
-	//}
-
-	domainDef.Memory = &libvirtxml.DomainMemory{
-		Value: uint(domainMemory),
-		Unit:  "MiB",
-	}
-	domainDef.VCPU = &libvirtxml.DomainVCPU{
-		Value: domainVcpu,
+func domainDefInit(domainDef *libvirtxml.Domain, machineConfig providerconfigv1.LibvirtMachineProviderConfig) error {
+	if machineConfig.DomainName != "" {
+		domainDef.Name = machineConfig.DomainName
+	} else {
+		return fmt.Errorf("machine does not have an DomainName set")
 	}
 
-	//domainDef.OS.Kernel = d.Get("kernel").(string)
-	//domainDef.OS.Initrd = d.Get("initrd").(string)
-	//domainDef.OS.Type.Arch = d.Get("arch").(string)
-	//domainDef.OS.Type.Machine = d.Get("machine").(string)
+	if machineConfig.DomainMemory != 0 {
+		domainDef.Memory = &libvirtxml.DomainMemory{
+			Value: uint(machineConfig.DomainMemory),
+			Unit:  "MiB",
+		}
+	} else {
+		return fmt.Errorf("machine does not have an DomainMemory set")
+	}
+
+	if machineConfig.DomainVcpu != 0 {
+		domainDef.VCPU = &libvirtxml.DomainVCPU{
+			Value: machineConfig.DomainVcpu,
+		}
+	} else {
+		return fmt.Errorf("machine does not have an DomainVcpu set")
+	}
+
 	domainDef.Devices.Emulator = "/usr/bin/kvm-spice"
-
-	//arch, err := getHostArchitecture(virConn)
-	//if err != nil {
-	//	return fmt.Errorf("Error retrieving host architecture: %s", err)
-	//}
-
-	//if err := setGraphics(d, &domainDef, arch); err != nil {
-	//	return err
-	//}
-
 	//setConsoles(d, &domainDef)
 	//setCmdlineArgs(d, &domainDef)
 	//setFirmware(d, &domainDef)
 	//setBootDevices(d, &domainDef)
 
+	return nil
+}
+
+func createDomain(machineProviderConfig *providerconfigv1.LibvirtMachineProviderConfig) (string, error) {
+	client, err := buildClient(machineProviderConfig.Uri)
+	if err != nil {
+		return "", fmt.Errorf("Failed to build libvirt client: %s", err)
+	}
+	log.Printf("[DEBUG] Create resource libvirt_domain")
+	virConn := client.libvirt
+
+	// Get default values from Host
+	domainDef, err := newDomainDefForConnection(virConn)
+	if err != nil {
+		return "", fmt.Errorf("Failed to newDomainDefForConnection: %s", err)
+	}
+
+	// Get values from machineProviderConfig
+	if err := domainDefInit(&domainDef, *machineProviderConfig); err != nil {
+		return "", fmt.Errorf("Failed to init domain definition from machineProviderConfig: %v", err)
+	}
+
 	log.Printf("[INFO] setCoreOSIgnition")
-	if err := setCoreOSIgnition(&domainDef); err != nil {
-		return err
+	if machineProviderConfig.IgnKey != "" {
+		if err := setCoreOSIgnition(&domainDef, machineProviderConfig.IgnKey); err != nil {
+			return "", err
+		}
+	} else {
+		return "", fmt.Errorf("machine does not has a IgnKey value")
 	}
 
 	log.Printf("[INFO] setDisks")
-	if err := setDisks(&domainDef, virConn); err != nil {
-		log.Printf("[INFO] Failed to setDisks log")
-		return fmt.Errorf("Failed to setDisks: %s", err)
+	if machineProviderConfig.Volume.VolumeName != "" {
+		VolumeKey := fmt.Sprintf(baseVolumePath+"%s", machineProviderConfig.Volume.VolumeName)
+		if err := setDisks(&domainDef, virConn, VolumeKey); err != nil {
+			return "", fmt.Errorf("Failed to setDisks: %s", err)
+		}
+	} else {
+		return "", fmt.Errorf("machine does not has a VolumeKey value : %v", err)
 	}
 
+	log.Printf("[INFO] setNetworkInterfaces")
+	var waitForLeases []*libvirtxml.DomainInterface
+	// TODO: support more than 1 interface
+	partialNetIfaces := make(map[string]*pendingMapping, 1)
+	if err := setNetworkInterfaces(&domainDef, virConn, partialNetIfaces, &waitForLeases,
+		machineProviderConfig.NetworkInterfaceHostname, machineProviderConfig.NetworkInterfaceName,
+		machineProviderConfig.NetworkInterfaceAddress); err != nil {
+		return "", err
+	}
+
+	// TODO: support setFilesystems
 	//if err := setFilesystems(d, &domainDef); err != nil {
 	//	return err
 	//}
 
-	log.Printf("[INFO] setNetworkInterfaces")
-	var waitForLeases []*libvirtxml.DomainInterface
-	//partialNetIfaces := make(map[string]*pendingMapping, d.Get("network_interface.#").(int))
-	partialNetIfaces := make(map[string]*pendingMapping, 1)
-
-	if err := setNetworkInterfaces(&domainDef, virConn, partialNetIfaces, &waitForLeases); err != nil {
-		return err
-	}
-
 	connectURI, err := virConn.GetURI()
 	if err != nil {
-		return fmt.Errorf("Error retrieving libvirt connection URI: %s", err)
+		return "", fmt.Errorf("error retrieving libvirt connection URI: %v", err)
 	}
 	log.Printf("[INFO] Creating libvirt domain at %s", connectURI)
 
 	data, err := xmlMarshallIndented(domainDef)
 	if err != nil {
-		return fmt.Errorf("Error serializing libvirt domain: %s", err)
+		return "", fmt.Errorf("error serializing libvirt domain: %v", err)
 	}
 
 	log.Printf("[DEBUG] Creating libvirt domain with XML:\n%s", data)
-
 	domain, err := virConn.DomainDefineXML(data)
 	if err != nil {
-		return fmt.Errorf("Error defining libvirt domain: %s", err)
+		return "", fmt.Errorf("error defining libvirt domain: %v", err)
 	}
 
-	err = domain.SetAutostart(autostart)
+	if err := domain.SetAutostart(machineProviderConfig.Autostart); err != nil {
+		return "", fmt.Errorf("error setting Autostart: %v", err)
+	}
 
 	err = domain.Create()
 	if err != nil {
-		return fmt.Errorf("Error creating libvirt domain: %s", err)
+		return "", fmt.Errorf("error creating libvirt domain: %v", err)
 	}
 	defer domain.Free()
 
 	id, err := domain.GetUUIDString()
 	if err != nil {
-		return fmt.Errorf("Error retrieving libvirt domain id: %s", err)
+		return "", fmt.Errorf("error retrieving libvirt domain id: %v", err)
 	}
 
 	log.Printf("[INFO] Domain ID: %s", id)
-
-	//if len(waitForLeases) > 0 {
-	//	err = domainWaitForLeases(domain, waitForLeases, d.Timeout(schema.TimeoutCreate),
-	//		domainDef, virConn)
-	//	if err != nil {
-	//		return err
-	//	}
-	//}
-
-	//err = resourceLibvirtDomainRead(d, meta)
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//// we must read devices again in order to set some missing ip/MAC/host mappings
-	//for i := 0; i < d.Get("network_interface.#").(int); i++ {
-	//	prefix := fmt.Sprintf("network_interface.%d", i)
-	//
-	//	mac := strings.ToUpper(d.Get(prefix + ".mac").(string))
-	//
-	//	// if we were waiting for an IP address for this MAC, go ahead.
-	//	if pending, ok := partialNetIfaces[mac]; ok {
-	//		// we should have the address now
-	//		addressesI, ok := d.GetOk(prefix + ".addresses")
-	//		if !ok {
-	//			return fmt.Errorf("Did not obtain the IP address for MAC=%s", mac)
-	//		}
-	//		for _, addressI := range addressesI.([]interface{}) {
-	//			address := addressI.(string)
-	//			log.Printf("[INFO] Finally adding IP/MAC/host=%s/%s/%s", address, mac, pending.hostname)
-	//			updateOrAddHost(pending.network, address, mac, pending.hostname)
-	//			if err != nil {
-	//				return fmt.Errorf("Could not add IP/MAC/host=%s/%s/%s: %s", address, mac, pending.hostname, err)
-	//			}
-	//		}
-	//	}
-	//}
-	//
-	//destroyDomainByUserRequest(d, domain)
-	return nil
+	return id, nil
 }
 
-func main() {
-	initValues()
-	if err := resourceLibvirtVolumeCreate(); err != nil {
-		log.Fatalf("Main: %s", err)
+func CreateMachine(machine *clusterv1.Machine) (string, error) {
+	machineProviderConfig, err := MachineProviderConfigFromClusterAPIMachineSpec(&machine.Spec)
+	if err != nil {
+		return "", fmt.Errorf("error getting machineProviderConfig from spec: %v", err)
 	}
-	if err := createDomain(); err != nil {
-		log.Fatalf("Main: %s", err)
+
+	if err := createVolume(machineProviderConfig); err != nil {
+		return "", fmt.Errorf("error creating volume: %v", err)
 	}
+
+	id, err := createDomain(machineProviderConfig)
+	if err != nil {
+		return "", fmt.Errorf("error creating domain: %v", err)
+	}
+	return id, nil
 }
