@@ -14,7 +14,6 @@ spec:
     value:
       apiVersion: libvirtproviderconfig/v1alpha1
       kind: LibvirtMachineProviderConfig
-      domainName: test
       domainMemory: 2048
       domainVcpu: 1
       ignKey: /var/lib/libvirt/images/worker.ign

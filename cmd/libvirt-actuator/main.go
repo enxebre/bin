@@ -70,7 +70,7 @@ func init() {
 			if err != nil {
 				return err
 			}
-			fmt.Printf("Machine creation was successful! InstanceID: %s\n")
+			fmt.Printf("Machine creation was successful!")
 			return nil
 		},
 	})

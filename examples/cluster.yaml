@@ -8,8 +8,8 @@ spec:
   clusterNetwork:
     services:
       cidrBlocks:
-        - "10.0.0.1/24"
+        - ""
     pods:
       cidrBlocks:
-        - "10.0.0.2/24"
+        - ""
     serviceDomain: example.com
