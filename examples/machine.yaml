@@ -24,7 +24,7 @@ spec:
         VolumeName: worker-example
       NetworkInterfaceName: tectonic
       NetworkInterfaceHostname: worker-example
-      NetworkInterfaceAddress: 192.168.124.11
+      NetworkInterfaceAddress: 192.168.124.12
       Autostart: false
       Uri: qemu+tcp://10.80.94.1/system
   versions:

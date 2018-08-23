@@ -24,7 +24,6 @@ import (
 type LibvirtMachineProviderConfig struct {
 	metav1.TypeMeta `json:",inline"`
 
-	DomainName               string  `json:"domainName"`
 	DomainMemory             int     `json:"domainMemory"`
 	DomainVcpu               int     `json:"domainVcpu"`
 	IgnKey                   string  `json:"ignKey"`

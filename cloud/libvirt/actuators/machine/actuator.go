@@ -45,7 +45,7 @@ func (a *Actuator) Create(cluster *clusterv1.Cluster, machine *clusterv1.Machine
 
 // Create creates a machine and is invoked by the Machine Controller
 func (a *Actuator) CreateMachine(cluster *clusterv1.Cluster, machine *clusterv1.Machine) (string, error) {
-	id, err := libvirtutils.CreateMachine(machine)
+	id, err := libvirtutils.CreateVolumeAndMachine(machine)
 	if err != nil {
 		return "", err
 	}

@@ -24,7 +24,6 @@ import (
 type LibvirtMachineProviderConfig struct {
 	metav1.TypeMeta
 
-	DomainName               string
 	DomainMemory             int
 	DomainVcpu               int
 	IgnKey                   string

@@ -107,7 +107,7 @@ func newDefVolumeFromXML(s string) (libvirtxml.StorageVolume, error) {
 	return volumeDef, nil
 }
 
-func createVolume(machineProviderConfig *providerconfigv1.LibvirtMachineProviderConfig) error {
+func createVolume(machineName string, machineProviderConfig *providerconfigv1.LibvirtMachineProviderConfig) error {
 	var poolName string
 	var baseVolumeID string
 	var volumeName string
@@ -128,6 +128,8 @@ func createVolume(machineProviderConfig *providerconfigv1.LibvirtMachineProvider
 
 	if machineProviderConfig.Volume.VolumeName != "" {
 		volumeName = machineProviderConfig.Volume.VolumeName
+	} else if machineName != "" {
+		volumeName = machineName
 	} else {
 		return fmt.Errorf("machine does not has a Volume.VolumeName value")
 	}
