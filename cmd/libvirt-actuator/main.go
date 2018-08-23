@@ -66,67 +66,67 @@ func init() {
 			}
 
 			actuator := createActuator(machine, log.WithField("example", "create-machine"))
-			id, err := actuator.CreateMachine(cluster, machine)
+			err = actuator.Create(cluster, machine)
 			if err != nil {
 				return err
 			}
-			fmt.Printf("Machine creation was successful! InstanceID: %s\n", id)
+			fmt.Printf("Machine creation was successful! InstanceID: %s\n")
 			return nil
 		},
 	})
 
-	//rootCmd.AddCommand(&cobra.Command{
-	//	Use:   "delete INSTANCE-ID",
-	//	Short: "Delete machine instance",
-	//	RunE: func(cmd *cobra.Command, args []string) error {
-	//		if err := checkFlags(cmd); err != nil {
-	//			return err
-	//		}
-	//		cluster, machine, err := readClusterResources(
-	//			cmd.Flag("cluster").Value.String(),
-	//			cmd.Flag("machine").Value.String(),
-	//		)
-	//		if err != nil {
-	//			return err
-	//		}
-	//
-	//		actuator := createActuator(machine, log.WithField("example", "create-machine"))
-	//		err = actuator.DeleteMachine(cluster, machine)
-	//		if err != nil {
-	//			return err
-	//		}
-	//		fmt.Printf("Machine delete operation was successful.\n")
-	//		return nil
-	//	},
-	//})
-	//
-	//rootCmd.AddCommand(&cobra.Command{
-	//	Use:   "exists",
-	//	Short: "Determine if underlying machine instance exists",
-	//	RunE: func(cmd *cobra.Command, args []string) error {
-	//		if err := checkFlags(cmd); err != nil {
-	//			return err
-	//		}
-	//		cluster, machine, err := readClusterResources(
-	//			cmd.Flag("cluster").Value.String(),
-	//			cmd.Flag("machine").Value.String())
-	//		if err != nil {
-	//			return err
-	//		}
-	//
-	//		actuator := createActuator(machine, log.WithField("example", "create-machine"))
-	//		exists, err := actuator.Exists(cluster, machine)
-	//		if err != nil {
-	//			return err
-	//		}
-	//		if exists {
-	//			fmt.Printf("Underlying machine's instance exists.\n")
-	//		} else {
-	//			fmt.Printf("Underlying machine's instance not found.\n")
-	//		}
-	//		return nil
-	//	},
-	//})
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   "delete INSTANCE-ID",
+		Short: "Delete machine instance",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := checkFlags(cmd); err != nil {
+				return err
+			}
+			cluster, machine, err := readClusterResources(
+				cmd.Flag("cluster").Value.String(),
+				cmd.Flag("machine").Value.String(),
+			)
+			if err != nil {
+				return err
+			}
+
+			actuator := createActuator(machine, log.WithField("example", "create-machine"))
+			err = actuator.Delete(cluster, machine)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("Machine delete operation was successful.\n")
+			return nil
+		},
+	})
+
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   "exists",
+		Short: "Determine if underlying machine instance exists",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := checkFlags(cmd); err != nil {
+				return err
+			}
+			cluster, machine, err := readClusterResources(
+				cmd.Flag("cluster").Value.String(),
+				cmd.Flag("machine").Value.String())
+			if err != nil {
+				return err
+			}
+
+			actuator := createActuator(machine, log.WithField("example", "create-machine"))
+			exists, err := actuator.Exists(cluster, machine)
+			if err != nil {
+				return err
+			}
+			if exists {
+				fmt.Printf("Underlying machine's instance exists.\n")
+			} else {
+				fmt.Printf("Underlying machine's instance not found.\n")
+			}
+			return nil
+		},
+	})
 }
 
 func readClusterResources(clusterLoc, machineLoc string) (*clusterv1.Cluster, *clusterv1.Machine, error) {

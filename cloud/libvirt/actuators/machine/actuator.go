@@ -37,25 +37,16 @@ func NewActuator(ClusterClient clusterclient.Interface) (*Actuator, error) {
 // Create creates a machine and is invoked by the Machine Controller
 func (a *Actuator) Create(cluster *clusterv1.Cluster, machine *clusterv1.Machine) error {
 	glog.Infof("Creating machine %v for cluster %v.", machine.Name, cluster.Name)
-	if _, err := a.CreateMachine(cluster, machine); err != nil {
+	if _, err := libvirtutils.CreateVolumeAndMachine(machine); err != nil {
 		return fmt.Errorf("error creating machine %v", err)
 	}
 	return nil
 }
 
-// Create creates a machine and is invoked by the Machine Controller
-func (a *Actuator) CreateMachine(cluster *clusterv1.Cluster, machine *clusterv1.Machine) (string, error) {
-	id, err := libvirtutils.CreateVolumeAndMachine(machine)
-	if err != nil {
-		return "", err
-	}
-	return id, nil
-}
-
 // Delete deletes a machine and is invoked by the Machine Controller
 func (a *Actuator) Delete(cluster *clusterv1.Cluster, machine *clusterv1.Machine) error {
 	glog.Infof("Deleting machine %v for cluster %v.", machine.Name, cluster.Name)
-	return fmt.Errorf("TODO: Not yet implemented")
+	return libvirtutils.DeleteVolumeAndDomain(machine)
 }
 
 // Update updates a machine and is invoked by the Machine Controller
@@ -67,5 +58,5 @@ func (a *Actuator) Update(cluster *clusterv1.Cluster, machine *clusterv1.Machine
 // Exists test for the existance of a machine and is invoked by the Machine Controller
 func (a *Actuator) Exists(cluster *clusterv1.Cluster, machine *clusterv1.Machine) (bool, error) {
 	glog.Info("Checking if machine %v for cluster %v exists.", machine.Name, cluster.Name)
-	return false, fmt.Errorf("TODO: Not yet implemented")
+	return libvirtutils.DomainExists(machine)
 }

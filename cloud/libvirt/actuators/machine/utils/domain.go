@@ -619,6 +619,52 @@ func createDomain(name string, machineProviderConfig *providerconfigv1.LibvirtMa
 	return id, nil
 }
 
+func deleteDomain(name string, machineProviderConfig *providerconfigv1.LibvirtMachineProviderConfig) error {
+	log.Printf("[DEBUG] Delete a domain")
+
+	client, err := buildClient(machineProviderConfig.Uri)
+	if err != nil {
+		return fmt.Errorf("Failed to build libvirt client: %s", err)
+	}
+
+	virConn := client.libvirt
+	if virConn == nil {
+		return fmt.Errorf(LibVirtConIsNil)
+	}
+
+	log.Printf("[DEBUG] Deleting domain %s", name)
+
+	domain, err := virConn.LookupDomainByName(name)
+	if err != nil {
+		return fmt.Errorf("Error retrieving libvirt domain: %s", err)
+	}
+	defer domain.Free()
+
+	state, _, err := domain.GetState()
+	if err != nil {
+		return fmt.Errorf("Couldn't get info about domain: %s", err)
+	}
+
+	if state == libvirt.DOMAIN_RUNNING || state == libvirt.DOMAIN_PAUSED {
+		if err := domain.Destroy(); err != nil {
+			return fmt.Errorf("Couldn't destroy libvirt domain: %s", err)
+		}
+	}
+
+	if err := domain.UndefineFlags(libvirt.DOMAIN_UNDEFINE_NVRAM); err != nil {
+		if e := err.(libvirt.Error); e.Code == libvirt.ERR_NO_SUPPORT || e.Code == libvirt.ERR_INVALID_ARG {
+			log.Printf("libvirt does not support undefine flags: will try again without flags")
+			if err := domain.Undefine(); err != nil {
+				return fmt.Errorf("Couldn't undefine libvirt domain: %s", err)
+			}
+		} else {
+			return fmt.Errorf("Couldn't undefine libvirt domain with flags: %s", err)
+		}
+	}
+
+	return nil
+}
+
 func CreateVolumeAndMachine(machine *clusterv1.Machine) (string, error) {
 	machineProviderConfig, err := MachineProviderConfigFromClusterAPIMachineSpec(&machine.Spec)
 	if err != nil {
@@ -636,8 +682,24 @@ func CreateVolumeAndMachine(machine *clusterv1.Machine) (string, error) {
 	return id, nil
 }
 
+func DeleteVolumeAndDomain(machine *clusterv1.Machine) error {
+	machineProviderConfig, err := MachineProviderConfigFromClusterAPIMachineSpec(&machine.Spec)
+	if err != nil {
+		return fmt.Errorf("error getting machineProviderConfig from spec: %v", err)
+	}
+
+	if err := deleteDomain(machine.Name, machineProviderConfig); err != nil {
+		return fmt.Errorf("error deleting domain: %v", err)
+	}
+
+	if err := deleteVolume(machine.Name, machineProviderConfig.Uri); err != nil {
+		return fmt.Errorf("error deleting domain: %v", err)
+	}
+	return nil
+}
+
 func DomainExists(machine *clusterv1.Machine) (bool, error) {
-	log.Printf("[DEBUG] Check if resource domain exists")
+	log.Printf("[DEBUG] Check if a domain exists")
 
 	machineProviderConfig, err := MachineProviderConfigFromClusterAPIMachineSpec(&machine.Spec)
 	client, err := buildClient(machineProviderConfig.Uri)
