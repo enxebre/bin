@@ -374,7 +374,7 @@ func updateHost(n *libvirt.Network, ip, mac, name string) error {
 func setNetworkInterfaces(domainDef *libvirtxml.Domain,
 	virConn *libvirt.Connect, partialNetIfaces map[string]*pendingMapping,
 	waitForLeases *[]*libvirtxml.DomainInterface,
-	networkInterfaceHostname string, networkInterfaceName string, networkInterfaceAddress string) error {
+	networkInterfaceHostname string, networkInterfaceName string, networkInterfaceAddress string, counter int) error {
 
 	// TODO: support more than 1 interface
 	for i := 0; i < 1; i++ {
@@ -417,6 +417,10 @@ func setNetworkInterfaces(domainDef *libvirtxml.Domain,
 				if networkInterfaceAddress != "" {
 					// some IP(s) provided
 					ip := net.ParseIP(networkInterfaceAddress)
+					ip = ip.To4()
+					// check ip != nil
+					ip[3] = byte(int(ip[3]) + counter)
+					log.Printf("[INFO] Increasing IP %s", ip.String())
 					if ip == nil {
 						return fmt.Errorf("Could not parse addresses '%s'", networkInterfaceAddress)
 					}
@@ -530,7 +534,7 @@ func domainDefInit(domainDef *libvirtxml.Domain, name string, machineConfig prov
 	return nil
 }
 
-func createDomain(name string, machineProviderConfig *providerconfigv1.LibvirtMachineProviderConfig) error {
+func createDomain(name string, machineProviderConfig *providerconfigv1.LibvirtMachineProviderConfig, counter int) error {
 	if name == "" {
 		return fmt.Errorf("Failed to create domain, name is empty")
 	}
@@ -577,7 +581,7 @@ func createDomain(name string, machineProviderConfig *providerconfigv1.LibvirtMa
 	var waitForLeases []*libvirtxml.DomainInterface
 	var hostName string
 	if machineProviderConfig.NetworkInterfaceHostname != "" {
-		hostName = machineProviderConfig.Volume.VolumeName
+		hostName = machineProviderConfig.NetworkInterfaceHostname
 	} else {
 		hostName = name
 	}
@@ -585,7 +589,7 @@ func createDomain(name string, machineProviderConfig *providerconfigv1.LibvirtMa
 	partialNetIfaces := make(map[string]*pendingMapping, 1)
 	if err := setNetworkInterfaces(&domainDef, virConn, partialNetIfaces, &waitForLeases,
 		hostName, machineProviderConfig.NetworkInterfaceName,
-		machineProviderConfig.NetworkInterfaceAddress); err != nil {
+		machineProviderConfig.NetworkInterfaceAddress, counter); err != nil {
 		return err
 	}
 
@@ -676,7 +680,7 @@ func deleteDomain(name string, machineProviderConfig *providerconfigv1.LibvirtMa
 	return nil
 }
 
-func CreateVolumeAndMachine(machine *clusterv1.Machine) error {
+func CreateVolumeAndMachine(machine *clusterv1.Machine, counter int) error {
 	machineProviderConfig, err := MachineProviderConfigFromClusterAPIMachineSpec(&machine.Spec)
 	if err != nil {
 		return fmt.Errorf("error getting machineProviderConfig from spec: %v", err)
@@ -686,7 +690,7 @@ func CreateVolumeAndMachine(machine *clusterv1.Machine) error {
 		return fmt.Errorf("error creating volume: %v", err)
 	}
 
-	if err = createDomain(machine.Name, machineProviderConfig); err != nil {
+	if err = createDomain(machine.Name, machineProviderConfig, counter); err != nil {
 		return fmt.Errorf("error creating domain: %v", err)
 	}
 	return nil

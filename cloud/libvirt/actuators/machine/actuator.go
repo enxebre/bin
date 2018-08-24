@@ -25,6 +25,7 @@ import (
 // Actuator is responsible for performing machine reconciliation
 type Actuator struct {
 	clusterClient clusterclient.Interface
+	counter       int
 }
 
 // ActuatorParams holds parameter information for Actuator
@@ -36,13 +37,16 @@ type ActuatorParams struct {
 func NewActuator(params ActuatorParams) (*Actuator, error) {
 	return &Actuator{
 		clusterClient: params.ClusterClient,
+		counter:       0,
 	}, nil
 }
 
 // Create creates a machine and is invoked by the Machine Controller
 func (a *Actuator) Create(cluster *clusterv1.Cluster, machine *clusterv1.Machine) error {
 	glog.Infof("Creating machine %v for cluster %v.", machine.Name, cluster.Name)
-	if err := libvirtutils.CreateVolumeAndMachine(machine); err != nil {
+	// TODO: hack to increase IPs. Build proper logic in setNetworkInterfaces method
+	a.counter++
+	if err := libvirtutils.CreateVolumeAndMachine(machine, a.counter); err != nil {
 		return fmt.Errorf("error creating machine %v", err)
 	}
 	return nil
