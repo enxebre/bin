@@ -20,9 +20,7 @@ spec:
       volume:
         poolName: default
         baseVolumeID: /var/lib/libvirt/images/coreos_base
-        volumeName: worker-example
       networkInterfaceName: tectonic
-      networkInterfaceHostname: worker-example
       networkInterfaceAddress: 192.168.124.12
       autostart: false
       uri: qemu+tcp://10.80.94.1/system

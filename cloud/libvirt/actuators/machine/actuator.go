@@ -27,17 +27,22 @@ type Actuator struct {
 	clusterClient clusterclient.Interface
 }
 
+// ActuatorParams holds parameter information for Actuator
+type ActuatorParams struct {
+	ClusterClient clusterclient.Interface
+}
+
 // NewActuator creates a new Actuator
-func NewActuator(ClusterClient clusterclient.Interface) (*Actuator, error) {
+func NewActuator(params ActuatorParams) (*Actuator, error) {
 	return &Actuator{
-		clusterClient: ClusterClient,
+		clusterClient: params.ClusterClient,
 	}, nil
 }
 
 // Create creates a machine and is invoked by the Machine Controller
 func (a *Actuator) Create(cluster *clusterv1.Cluster, machine *clusterv1.Machine) error {
 	glog.Infof("Creating machine %v for cluster %v.", machine.Name, cluster.Name)
-	if _, err := libvirtutils.CreateVolumeAndMachine(machine); err != nil {
+	if err := libvirtutils.CreateVolumeAndMachine(machine); err != nil {
 		return fmt.Errorf("error creating machine %v", err)
 	}
 	return nil

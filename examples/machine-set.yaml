@@ -2,7 +2,7 @@
 apiVersion: cluster.k8s.io/v1alpha1
 kind: MachineSet
 metadata:
-  name: worker-example
+  name: worker-example-machine-set
   namespace: test
   labels:
     sigs.k8s.io/cluster-api-cluster: tb-asg-35
@@ -12,12 +12,14 @@ spec:
   replicas: 2
   selector:
     matchLabels:
-      sigs.k8s.io/cluster-api-machineset: worker-example
+      sigs.k8s.io/cluster-api-machineset: worker-example-machine-set
       sigs.k8s.io/cluster-api-cluster: tb-asg-35
+      sigs.k8s.io/cluster-api-machine-role: infra
+      sigs.k8s.io/cluster-api-machine-type: worker
   template:
     metadata:
       labels:
-        sigs.k8s.io/cluster-api-machineset: worker-example
+        sigs.k8s.io/cluster-api-machineset: worker-example-machine-set
         sigs.k8s.io/cluster-api-cluster: tb-asg-35
         sigs.k8s.io/cluster-api-machine-role: infra
         sigs.k8s.io/cluster-api-machine-type: worker
@@ -32,9 +34,7 @@ spec:
           volume:
             poolName: default
             baseVolumeID: /var/lib/libvirt/images/coreos_base
-            volumeName: worker-example
           networkInterfaceName: tectonic
-          networkInterfaceHostname: worker-example
           networkInterfaceAddress: 192.168.124.12
           autostart: false
           uri: qemu+tcp://10.80.94.1/system

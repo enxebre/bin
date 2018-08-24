@@ -530,10 +530,13 @@ func domainDefInit(domainDef *libvirtxml.Domain, name string, machineConfig prov
 	return nil
 }
 
-func createDomain(name string, machineProviderConfig *providerconfigv1.LibvirtMachineProviderConfig) (string, error) {
+func createDomain(name string, machineProviderConfig *providerconfigv1.LibvirtMachineProviderConfig) error {
+	if name == "" {
+		return fmt.Errorf("Failed to create domain, name is empty")
+	}
 	client, err := buildClient(machineProviderConfig.Uri)
 	if err != nil {
-		return "", fmt.Errorf("Failed to build libvirt client: %s", err)
+		return fmt.Errorf("Failed to build libvirt client: %s", err)
 	}
 	log.Printf("[DEBUG] Create resource libvirt_domain")
 	virConn := client.libvirt
@@ -541,41 +544,49 @@ func createDomain(name string, machineProviderConfig *providerconfigv1.LibvirtMa
 	// Get default values from Host
 	domainDef, err := newDomainDefForConnection(virConn)
 	if err != nil {
-		return "", fmt.Errorf("Failed to newDomainDefForConnection: %s", err)
+		return fmt.Errorf("Failed to newDomainDefForConnection: %s", err)
 	}
 
 	// Get values from machineProviderConfig
 	if err := domainDefInit(&domainDef, name, *machineProviderConfig); err != nil {
-		return "", fmt.Errorf("Failed to init domain definition from machineProviderConfig: %v", err)
+		return fmt.Errorf("Failed to init domain definition from machineProviderConfig: %v", err)
 	}
 
 	log.Printf("[INFO] setCoreOSIgnition")
 	if machineProviderConfig.IgnKey != "" {
 		if err := setCoreOSIgnition(&domainDef, machineProviderConfig.IgnKey); err != nil {
-			return "", err
+			return err
 		}
 	} else {
-		return "", fmt.Errorf("machine does not has a IgnKey value")
+		return fmt.Errorf("machine does not has a IgnKey value")
 	}
 
 	log.Printf("[INFO] setDisks")
-	if name != "" {
-		VolumeKey := fmt.Sprintf(baseVolumePath+"%s", name)
-		if err := setDisks(&domainDef, virConn, VolumeKey); err != nil {
-			return "", fmt.Errorf("Failed to setDisks: %s", err)
-		}
+	var volumeName string
+	if machineProviderConfig.Volume.VolumeName != "" {
+		volumeName = machineProviderConfig.Volume.VolumeName
 	} else {
-		return "", fmt.Errorf("machine does not has a VolumeKey value : %v", err)
+		volumeName = name
+	}
+	VolumeKey := fmt.Sprintf(baseVolumePath+"%s", volumeName)
+	if err := setDisks(&domainDef, virConn, VolumeKey); err != nil {
+		return fmt.Errorf("Failed to setDisks: %s", err)
 	}
 
 	log.Printf("[INFO] setNetworkInterfaces")
 	var waitForLeases []*libvirtxml.DomainInterface
+	var hostName string
+	if machineProviderConfig.NetworkInterfaceHostname != "" {
+		hostName = machineProviderConfig.Volume.VolumeName
+	} else {
+		hostName = name
+	}
 	// TODO: support more than 1 interface
 	partialNetIfaces := make(map[string]*pendingMapping, 1)
 	if err := setNetworkInterfaces(&domainDef, virConn, partialNetIfaces, &waitForLeases,
-		name, machineProviderConfig.NetworkInterfaceName,
+		hostName, machineProviderConfig.NetworkInterfaceName,
 		machineProviderConfig.NetworkInterfaceAddress); err != nil {
-		return "", err
+		return err
 	}
 
 	// TODO: support setFilesystems
@@ -585,38 +596,38 @@ func createDomain(name string, machineProviderConfig *providerconfigv1.LibvirtMa
 
 	connectURI, err := virConn.GetURI()
 	if err != nil {
-		return "", fmt.Errorf("error retrieving libvirt connection URI: %v", err)
+		return fmt.Errorf("error retrieving libvirt connection URI: %v", err)
 	}
 	log.Printf("[INFO] Creating libvirt domain at %s", connectURI)
 
 	data, err := xmlMarshallIndented(domainDef)
 	if err != nil {
-		return "", fmt.Errorf("error serializing libvirt domain: %v", err)
+		return fmt.Errorf("error serializing libvirt domain: %v", err)
 	}
 
 	log.Printf("[DEBUG] Creating libvirt domain with XML:\n%s", data)
 	domain, err := virConn.DomainDefineXML(data)
 	if err != nil {
-		return "", fmt.Errorf("error defining libvirt domain: %v", err)
+		return fmt.Errorf("error defining libvirt domain: %v", err)
 	}
 
 	if err := domain.SetAutostart(machineProviderConfig.Autostart); err != nil {
-		return "", fmt.Errorf("error setting Autostart: %v", err)
+		return fmt.Errorf("error setting Autostart: %v", err)
 	}
 
 	err = domain.Create()
 	if err != nil {
-		return "", fmt.Errorf("error creating libvirt domain: %v", err)
+		return fmt.Errorf("error creating libvirt domain: %v", err)
 	}
 	defer domain.Free()
 
 	id, err := domain.GetUUIDString()
 	if err != nil {
-		return "", fmt.Errorf("error retrieving libvirt domain id: %v", err)
+		return fmt.Errorf("error retrieving libvirt domain id: %v", err)
 	}
 
 	log.Printf("[INFO] Domain ID: %s", id)
-	return id, nil
+	return nil
 }
 
 func deleteDomain(name string, machineProviderConfig *providerconfigv1.LibvirtMachineProviderConfig) error {
@@ -665,21 +676,20 @@ func deleteDomain(name string, machineProviderConfig *providerconfigv1.LibvirtMa
 	return nil
 }
 
-func CreateVolumeAndMachine(machine *clusterv1.Machine) (string, error) {
+func CreateVolumeAndMachine(machine *clusterv1.Machine) error {
 	machineProviderConfig, err := MachineProviderConfigFromClusterAPIMachineSpec(&machine.Spec)
 	if err != nil {
-		return "", fmt.Errorf("error getting machineProviderConfig from spec: %v", err)
+		return fmt.Errorf("error getting machineProviderConfig from spec: %v", err)
 	}
 
 	if err := createVolume(machine.Name, machineProviderConfig); err != nil {
-		return "", fmt.Errorf("error creating volume: %v", err)
+		return fmt.Errorf("error creating volume: %v", err)
 	}
 
-	id, err := createDomain(machine.Name, machineProviderConfig)
-	if err != nil {
-		return "", fmt.Errorf("error creating domain: %v", err)
+	if err = createDomain(machine.Name, machineProviderConfig); err != nil {
+		return fmt.Errorf("error creating domain: %v", err)
 	}
-	return id, nil
+	return nil
 }
 
 func DeleteVolumeAndDomain(machine *clusterv1.Machine) error {
